@@ -1,0 +1,231 @@
+version: "3"
+
+secrets:
+  ca.crt:
+    file: ./secrets/certificate_authority/ca/ca.crt
+  elasticsearch.keystore:
+    file: ./secrets/elasticsearch.keystore
+  elastic-stack-ca.p12:
+    file: ./secrets/certificate_authority/elastic-stack-ca.p12
+  elasticsearch.key:
+    file: ./secrets/certificates/elasticsearch/elasticsearch.key
+  elasticsearch.cert:
+    file: ./secrets/certificates/elasticsearch/elasticsearch.crt
+  kibana.key:
+    file: ./secrets/certificates/kibana/kibana.key
+  kibana.cert:
+    file: ./secrets/certificates/kibana/kibana.crt
+  logstash.pkcs8.key:
+    file: ./secrets/certificates/logstash/logstash.pkcs8.key
+  logstash.key:
+    file: ./secrets/certificates/logstash/logstash.key
+  logstash.p12:
+    file: ./secrets/keystores/logstash/logstash.p12
+  logstash.cert:
+    file: ./secrets/certificates/logstash/logstash.crt
+
+services:
+  setup:
+    container_name: setup
+    image: docker.elastic.co/elasticsearch/elasticsearch:${STACK_VERSION}
+    command: bash ${ELASTIC_DIR}/config/setup.sh
+    user: "0"
+    volumes:
+      - ./secrets:/secrets/
+      - ./setup/setup.sh:${ELASTIC_DIR}/config/setup.sh
+      - ./setup/instances.yml:${ELASTIC_DIR}/config/instances.yml:ro
+    environment: 
+      ELASTIC_USERNAME: ${ELASTIC_USERNAME}
+      ELASTIC_PASSWORD: ${ELASTIC_PASSWORD}
+      KIBANA_USERNAME: ${KIBANA_USERNAME}
+      KIBANA_PASSWORD: ${KIBANA_PASSWORD}
+      ELASTIC_DIR: ${ELASTIC_DIR}
+      KIBANA_DIR: ${KIBANA_DIR}
+    networks: 
+      - elk
+    secrets:
+      - source: ca.crt
+        target: ${ELASTIC_DIR}/config/ca.crt
+      - source: elasticsearch.cert
+        target: ${ELASTIC_DIR}/config/elasticsearch.crt
+    healthcheck:
+      test: ["CMD-SHELL", "[ -f ${ELASTIC_DIR}/config/elasticsearch.crt ]"]
+      interval: 1s
+      timeout: 5s
+      retries: 120
+
+  elasticsearch:
+    depends_on:
+      setup:
+        condition: service_healthy
+    container_name: elasticsearch
+    hostname: elasticsearch
+    networks:
+      - elk
+    image: docker.elastic.co/elasticsearch/elasticsearch:${STACK_VERSION}
+    volumes:
+      - elasticsearchdata:${ELASTIC_DIR}/data
+    secrets:
+      - source: elasticsearch.keystore
+        target: ${ELASTIC_DIR}/config/elasticsearch.keystore
+      - source: ca.crt
+        target: ${ELASTIC_DIR}/config/ca.crt
+      - source: elasticsearch.cert
+        target: ${ELASTIC_DIR}/config/elasticsearch.crt
+      - source: elasticsearch.key
+        target: ${ELASTIC_DIR}/config/elasticsearch.key
+    ports:
+      - "${ES_PORT}:9200"
+      - "9300:9300"
+    environment:
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
+      - cluster.name=${CLUSTER_NAME}
+      - node.name=elasticsearch
+      - bootstrap.memory_lock=true
+      - discovery.type=single-node
+      - xpack.security.enabled=true
+      - xpack.security.http.ssl.enabled=true
+      - xpack.security.http.ssl.key=${ELASTIC_DIR}/config/elasticsearch.key
+      - xpack.security.http.ssl.certificate=${ELASTIC_DIR}/config/elasticsearch.crt
+      - xpack.security.http.ssl.certificate_authorities=${ELASTIC_DIR}/config/ca.crt
+      - xpack.security.http.ssl.verification_mode=certificate
+      - xpack.security.transport.ssl.enabled=true
+      - xpack.security.transport.ssl.key=${ELASTIC_DIR}/config/elasticsearch.key
+      - xpack.security.transport.ssl.certificate=${ELASTIC_DIR}/config/elasticsearch.crt
+      - xpack.security.transport.ssl.certificate_authorities=${ELASTIC_DIR}/config/ca.crt
+      - xpack.security.transport.ssl.verification_mode=certificate
+      - xpack.license.self_generated.type=${LICENSE}
+    mem_limit: ${MEM_LIMIT}
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -s --cacert ${ELASTIC_DIR}/config/ca.crt https://localhost:9200 | grep -q 'missing authentication credentials'",
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 120
+
+  kibana:
+    container_name: kibana
+    hostname: kibana
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - elk
+    image: docker.elastic.co/kibana/kibana:${STACK_VERSION}
+    volumes:
+      - kibanadata:${KIBANA_DIR}/data
+    secrets:
+      - source: ca.crt
+        target: ${KIBANA_DIR}/config/ca.crt
+      - source: kibana.cert
+        target: ${KIBANA_DIR}/config/kibana.crt
+      - source: kibana.key
+        target: ${KIBANA_DIR}/config/kibana.key
+    ports:
+      - "${KIBANA_PORT}:5601"
+    environment:
+      - ELASTICSEARCH_HOSTS=https://elasticsearch:9200
+      - ELASTICSEARCH_USERNAME=${KIBANA_USERNAME}
+      - ELASTICSEARCH_PASSWORD=${KIBANA_PASSWORD}
+      - ELASTICSEARCH_SSL_CERTIFICATEAUTHORITIES=${KIBANA_DIR}/config/ca.crt
+    mem_limit: ${MEM_LIMIT}
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -s -I http://localhost:5601 | grep -q 'HTTP/1.1 302 Found'",
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+  
+  logstash:
+    container_name: logstash
+    hostname: logstash
+    depends_on:
+      - elasticsearch
+      - kibana
+      - db
+    networks:
+      - elk
+    image: docker.elastic.co/logstash/logstash:${STACK_VERSION}
+    volumes:
+      - ./logstash/config/logstash.yml:${LOGSTASH_DIR}/config/logstash.yml
+      - ./logstash/config/pipeline.yml:${LOGSTASH_DIR}/config/pipeline.yml
+      - ./logstash/pipeline:${LOGSTASH_DIR}/pipeline
+      - ./logstash/driver:${LOGSTASH_DIR}/driver
+    ports:
+      - "5044:5044"
+      - "5000:5000/tcp"
+      - "5000:5000/udp"
+      - "9600:9600"
+    environment:
+      path.settings: null
+      CONFIG_DIR: ${LOGSTASH_DIR}/config
+      ELASTIC_USERNAME: ${ELASTIC_USERNAME}
+      ELASTIC_PASSWORD: ${ELASTIC_PASSWORD}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_USERNAME: ${POSTGRES_USERNAME}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DATABASE: ${POSTGRES_DATABASE}
+    secrets:
+      - source: ca.crt
+        target: ${LOGSTASH_DIR}/config/ca.crt
+      - source: logstash.cert
+        target: ${LOGSTASH_DIR}/config/logstash.crt
+      - source: logstash.pkcs8.key
+        target: ${LOGSTASH_DIR}/config/logstash.pkcs8.key
+      - source: logstash.key
+        target: ${LOGSTASH_DIR}/config/logstash.key
+      - source: logstash.p12
+        target: ${LOGSTASH_DIR}/config/logstash.p12
+    mem_limit: ${MEM_LIMIT}
+
+  db:
+    image: postgres
+    container_name: postgres
+    hostname: postgres
+    restart: always
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    volumes:
+      - /postgres/data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: ${POSTGRES_DATABASE}
+      POSTGRES_USER: ${POSTGRES_USERNAME}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    networks:
+      - elk
+
+  pgadmin:
+    container_name: pgadmin
+    hostname: pgadmin
+    image: dpage/pgadmin4
+    restart: always
+    ports:
+      - "${PG_ADMIN_PORT}:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PG_ADMIN_USERNAME}
+      PGADMIN_DEFAULT_PASSWORD: ${PG_ADMIN_PASSWORD}
+      PGADMIN_CONFIG_CONSOLE_LOG_LEVEL: 10
+    networks:
+      - elk
+
+volumes:
+  elasticsearchdata:
+  kibanadata:
+  secrets:
+    driver: local
+  setup:
+    driver: local
+
+networks:
+  elk:
+    driver: bridge

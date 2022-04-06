@@ -1,0 +1,56 @@
+server:
+  name: kibana
+  host: 0.0.0.0
+  publicBaseUrl: ${KIBANA_URL}
+  ssl:
+    enabled: true
+    certificate: "${CONFIG_DIR}/kibana.crt"
+    key: "${CONFIG_DIR}/kibana.key"
+    certificateAuthorities: [ "${CONFIG_DIR}/ca.crt" ]
+
+# Elasticsearch settings
+elasticsearch:
+  hosts: [ "https://elasticsearch:9200" ]
+  username: ${KIBANA_USERNAME}
+  password: ${KIBANA_PASSWORD}
+  serviceAccountToken: "AAEAAWVsYXN0aWMva2liYW5hL2Vucm9sbC1wcm9jZXNzLXRva2VuLTE2NDgwOTA4MTgyNDk6TUZsNDFicEFTenluZ1MwSDhsMEdmQQ"
+  ssl:
+    certificateAuthorities: [ "${CONFIG_DIR}/ca.crt" ]
+
+# Elasticsearch monitoring settings
+monitoring:
+  ui:
+    container:
+      elasticsearch:
+        enabled: true
+
+xpack:
+  # X-Pack Security
+  security:
+    # enabled: true
+    encryptionKey: "${ENCRYPTION_KEY}"
+#     http:
+#       ssl:
+#         keystore:
+#           secure_password: ${ELASTIC_PASSWORD}
+
+#   encryptedSavedObjects:
+#     encryptionKey: "${ENCRYPTION_KEY}"
+
+#   reporting:
+#     encryptionKey: "${ENCRYPTION_KEY}"
+
+  # fleet:
+  #   enabled: true
+  #   outputs: [{id: fleet-default-output, name: default, is_default: true, is_default_monitoring: true, type: elasticsearch, hosts: ['https://elasticsearch:9200'], ca_trusted_fingerprint: f11f8c9280a0da062bb6bf8d3cc3e73796ac5bf206eb142bbc99f037bacdc7bc}]
+  #   agents:
+  #     enabled: true
+  #     tlsCheckDisabled: true
+  #     kibana:
+  #       host: "https://kibana:5601"
+  #     elasticsearch:
+  #       host: "https://elasticsearch:9200"
+  # ingestManager:
+  #   enabled: true
+  #   fleet:
+  #     enabled: true
