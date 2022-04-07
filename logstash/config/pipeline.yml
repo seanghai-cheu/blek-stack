@@ -1,11 +1,11 @@
 - pipeline.id: normal-beats
-  path.config: "/usr/share/logstash/pipeline/beat.conf"
+  path.config: "${LOGSTASH_DIR}/pipeline/beat.conf"
   pipeline.workers: 3
 
 - pipeline.id: http
-  path.config: "/usr/share/logstash/pipeline/http.conf"
+  path.config: "${LOGSTASH_DIR}/pipeline/http.conf"
   pipeline.workers: 3
 
 - pipeline.id: jdbc
-  path.config: "/usr/share/logstash/pipeline/jdbc.conf"
+  path.config: "${LOGSTASH_DIR}/pipeline/jdbc.conf"
   pipeline.workers: 3
