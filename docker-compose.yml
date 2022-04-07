@@ -1,4 +1,4 @@
-version: "3"
+version: "3.7"
 
 secrets:
   ca.crt:
@@ -25,38 +25,33 @@ secrets:
     file: ./secrets/certificates/logstash/logstash.crt
 
 services:
-  setup:
-    container_name: setup
+  setting:
+    container_name: setting
     image: docker.elastic.co/elasticsearch/elasticsearch:${STACK_VERSION}
-    command: bash ${ELASTIC_DIR}/config/setup.sh
+    command: bash ${ELASTIC_DIR}/config/setting.sh
     user: "0"
     volumes:
-      - ./secrets:/secrets/
-      - ./setup/setup.sh:${ELASTIC_DIR}/config/setup.sh
-      - ./setup/instances.yml:${ELASTIC_DIR}/config/instances.yml:ro
+      - ./setup/setting.sh:${ELASTIC_DIR}/config/setting.sh
     environment: 
       ELASTIC_USERNAME: ${ELASTIC_USERNAME}
       ELASTIC_PASSWORD: ${ELASTIC_PASSWORD}
       KIBANA_USERNAME: ${KIBANA_USERNAME}
       KIBANA_PASSWORD: ${KIBANA_PASSWORD}
       ELASTIC_DIR: ${ELASTIC_DIR}
-      KIBANA_DIR: ${KIBANA_DIR}
-    networks: 
-      - elk
     secrets:
       - source: ca.crt
         target: ${ELASTIC_DIR}/config/ca.crt
-      - source: elasticsearch.cert
-        target: ${ELASTIC_DIR}/config/elasticsearch.crt
+    networks: 
+      - elk
     healthcheck:
-      test: ["CMD-SHELL", "[ -f ${ELASTIC_DIR}/config/elasticsearch.crt ]"]
+      test: ["CMD-SHELL", "[ -f ${ELASTIC_DIR}/config/ca.crt ]"]
       interval: 1s
       timeout: 5s
       retries: 120
 
   elasticsearch:
     depends_on:
-      setup:
+      setting:
         condition: service_healthy
     container_name: elasticsearch
     hostname: elasticsearch
@@ -221,10 +216,6 @@ services:
 volumes:
   elasticsearchdata:
   kibanadata:
-  secrets:
-    driver: local
-  setup:
-    driver: local
 
 networks:
   elk:
