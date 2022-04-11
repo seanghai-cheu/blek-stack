@@ -1,8 +1,7 @@
 # elastic-stack-docker (elk-stack)
 
-This docker-compose project will assist with 
+This docker-compose project will assist with setting up and creating a ELK stack using either self-signed TLS certificates or using LetsEncrypt certificates for communications. In general you get HTTPS for all services.
 
-> Please checkout our 
 ## Environment Details
 
 This project was built so that you can test and use built-in features under Elastic Security, like detections, signals, cases, and other features.
